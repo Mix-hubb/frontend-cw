@@ -3,6 +3,8 @@ import { ref, reactive, onMounted } from 'vue'
 
 const API_BASE = window.__ENV__.API_BASE
 
+console.log('API_BASE:', API_BASE)
+
 const items = ref([])
 const showList = ref(true)
 const loading = ref(false)
@@ -27,10 +29,28 @@ const fetchAll = async () => {
 	loading.value = true
 	message.value = ''
 	try {
-		const res = await fetch(`${API_BASE}/items`)
+		const url = `${API_BASE}/items`
+		console.log('Fetching:', url)
+		const res = await fetch(url)
+		console.log('Response status:', res.status, res.headers.get('content-type'))
+		
+		if (!res.ok) {
+			const text = await res.text()
+			console.error('API error:', res.status, text.substring(0, 200))
+			return (message.value = `API error ${res.status}: ${res.statusText}. Check API_BASE: ${API_BASE}`)
+		}
+		
+		const contentType = res.headers.get('content-type') || ''
+		if (!contentType.includes('application/json')) {
+			const text = await res.text()
+			console.error('Response is not JSON:', text.substring(0, 200))
+			return (message.value = `API returned non-JSON: ${res.status}`)
+		}
+		
 		items.value = await res.json()
 	} catch (e) {
-		message.value = 'Fetch error: ' + e.message
+		message.value = 'Fetch error: ' + e.message + `. API_BASE: ${API_BASE}`
+		console.error(e)
 	} finally {
 		loading.value = false
 	}
@@ -52,14 +72,18 @@ const createItem = async () => {
 	if (!newItem.title) return (message.value = 'Title required')
 	message.value = ''
 	try {
-		const res = await fetch(`${API_BASE}/items`, {
+		const url = `${API_BASE}/items`
+		console.log('POST to:', url)
+		const res = await fetch(url, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(newItem),
 		})
+		console.log('Status:', res.status, res.statusText)
 		if (res.status >= 400) {
 			const j = await res.json().catch(() => ({}))
-			return (message.value = j.error || 'Create failed')
+			const errorMsg = j.error || j.message || `HTTP ${res.status}: ${res.statusText}`
+			return (message.value = errorMsg)
 		}
 		const created = await res.json()
 		message.value = 'Created id ' + (created?.id || '(unknown)')
